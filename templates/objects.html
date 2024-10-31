@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2><i class="fas fa-folder-open"></i> Bucket: {{ bucket_name }}</h2>
+
+    <a href="{{ url_for('buckets') }}" class="btn btn-secondary mb-3">
+        <i class="fas fa-arrow-left"></i> Back to Buckets
+    </a>
+
+    <div class="form-control">
+        <form method="get" action="{{ url_for('objects', bucket_name=bucket_name) }}">
+            <input type="text" name="search" placeholder="Search Objects" value="{{ search_term }}" class="search-input">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-search"></i> Search
+            </button>
+        </form>
+    </div>
+
+    {% if objects %}
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th><i class="fas fa-file-alt"></i> Object Path</th>
+                <th><i class="fas fa-weight"></i> Size (Bytes)</th>
+                <th><i class="fas fa-calendar-alt"></i> Last Modified</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for obj in objects %}
+            <tr>
+                <td>{{ bucket_name }}/{{ obj.Key }}</td>
+                <td>{{ "{:,.0f}".format(obj.Size | default(0)) }}</td>
+                <td>{{ obj.LastModified.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>
+                    <a href="{{ url_for('download', bucket_name=bucket_name, object_key=obj.Key | urlencode) }}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-download"></i> Download
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('objects', bucket_name=bucket_name, page=page-1, search=search_term) }}" class="btn btn-primary">
+                <i class="fas fa-chevron-left"></i> Previous
+            </a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+            <a href="{{ url_for('objects', bucket_name=bucket_name, page=page+1, search=search_term) }}" class="btn btn-primary">
+                Next <i class="fas fa-chevron-right"></i>
+            </a>
+        {% endif %}
+    </div>
+    {% else %}
+    <p>No objects found in this bucket.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2><i class="fas fa-database"></i> Your S3 Buckets</h2>
+
+    <div class="form-control">
+        <form method="get" action="{{ url_for('buckets') }}">
+            <input type="text" name="search" placeholder="Search Buckets" value="{{ search_term }}">
+            <button type="submit"><i class="fas fa-search"></i> Search</button>
+        </form>
+    </div>
+
+    {% if buckets %}
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th><i class="fas fa-folder"></i> Bucket Name</th>
+                <th><i class="fas fa-calendar-alt"></i> Creation Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bucket in buckets %}
+            <tr>
+                <td><i class="fas fa-archive icon"></i> {{ bucket.Name }}</td>
+                <td>{{ bucket.CreationDate.strftime('%Y-%m-%d') }}</td>
+                <td class="table-actions">
+                    <a href="{{ url_for('objects', bucket_name=bucket.Name) }}" class="btn btn-primary"><i class="fas fa-folder-open"></i> View Objects</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('buckets', page=page-1, search=search_term) }}"><i class="fas fa-chevron-left"></i> Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+            <a href="{{ url_for('buckets', page=page+1, search=search_term) }}">Next <i class="fas fa-chevron-right"></i></a>
+        {% endif %}
+    </div>
+    {% else %}
+    <p>No buckets found.</p>
+    {% endif %}
+</div>
+{% endblock %}
