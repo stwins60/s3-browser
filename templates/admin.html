@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2>Admin Panel</h2>
+
+    <!-- Add User with Permissions and Password -->
+    <form method="POST" action="{{ url_for('admin') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <input type="text" class="form-control" id="username" name="username" required>
+        </div>
+        <div class="mb-3">
+            <label for="password" class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+        <div class="mb-3">
+            <label for="bucket_names" class="form-label">Bucket Names (comma-separated)</label>
+            <input type="text" class="form-control" id="bucket_names" name="bucket_names" placeholder="e.g., bucket1, bucket2" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Create User and Grant Permissions</button>
+    </form>
+
+    <hr>
+
+    <!-- View and Manage User Permissions -->
+    <h3>Manage User Permissions</h3>
+    <form method="GET" action="{{ url_for('admin') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label for="username_view" class="form-label">Username</label>
+            <input type="text" class="form-control" id="username_view" name="username_view" placeholder="Enter username to view permissions" required>
+        </div>
+        <button type="submit" class="btn btn-secondary">View Permissions</button>
+    </form>
+
+    {% if user_permissions %}
+    <h4>Permissions for {{ current_user }}</h4>
+    <ul>
+        {% for permission in user_permissions %}
+        <li>
+            {{ permission }}
+            <form method="POST" action="{{ url_for('remove_permission') }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="username" value="{{ current_user }}">
+                <input type="hidden" name="bucket_name" value="{{ permission }}">
+                <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    <form method="POST" action="{{ url_for('remove_all_permissions') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="username" value="{{ current_user }}">
+        <button type="submit" class="btn btn-danger">Remove All Permissions</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
