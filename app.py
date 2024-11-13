@@ -26,6 +26,7 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 app.config['SESSION_FILE_DIR'] = './browser_session/'
+app.config['IAM_ROLE'] = os.getenv("IAM_ROLE")
 
 Session(app)
 
@@ -64,7 +65,8 @@ def admin_required(f):
 
 def get_s3_client():
 
-    credentials =assume_role('<role_arn>') # arn:aws:iam::account-id:role/role-name
+    # credentials =assume_role('<role_arn>') # arn:aws:iam::account-id:role/role-name
+    credentials = assume_role(app.config['IAM_ROLE'])
     
     aws_access_key_id = credentials.get('AccessKeyId')
     aws_secret_access_key = credentials.get('SecretAccessKey')
@@ -345,7 +347,7 @@ if __name__ == '__main__':
     if not os.path.exists(app.config['SESSION_FILE_DIR']):
         os.mkdir(app.config['SESSION_FILE_DIR'])
 
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+    app.run(host='0.0.0.0', port=5010, debug=True)
 
 
 # print(get_s3_client().list_buckets()['Buckets'])
