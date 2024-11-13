@@ -24,7 +24,7 @@ Getting Started
 1.  **Clone the Repository**:
 
     ```bash
-    git clone https://github.com/your-username/flask-s3-browser.git
+    git clone https://github.com/stwins60/s3-browser.git
     cd flask-s3-browser
     ```
 
