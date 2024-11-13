@@ -18,6 +18,10 @@
             <label for="bucket_names" class="form-label">Bucket Names (comma-separated)</label>
             <input type="text" class="form-control" id="bucket_names" name="bucket_names" placeholder="e.g., bucket1, bucket2" required>
         </div>
+        <div class="mb-3">
+            <label for="permission_expiry" class="form-label">Expiration Date</label>
+            <input type="date" class="form-control" id="permission_expiry" name="permission_expiry" required>
+        </div>
         <button type="submit" class="btn btn-primary">Create User and Grant Permissions</button>
     </form>
 
@@ -34,26 +38,56 @@
         <button type="submit" class="btn btn-secondary">View Permissions</button>
     </form>
 
+    <hr>
+
+    <!-- Download User Audit Button -->
+    <a href="{{ url_for('download_audit') }}" class="btn btn-info">Download User Audit</a>
+
     {% if user_permissions %}
-    <h4>Permissions for {{ current_user }}</h4>
-    <ul>
-        {% for permission in user_permissions %}
-        <li>
-            {{ permission }}
-            <form method="POST" action="{{ url_for('remove_permission') }}" style="display: inline;">
+    <div class="row mt-4">
+        <!-- Permissions List Column -->
+        <div class="col-md-6">
+            <h4>Permissions for {{ current_user }}</h4>
+            <ul class="list-group">
+                {% for permission, expiry in user_permissions.items() %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ permission }} - 
+                    <strong>
+                        {% if expiry %}
+                            Expiration: {{ expiry }}
+                        {% else %}
+                            No expiration set
+                        {% endif %}
+                    </strong>
+                    <form method="POST" action="{{ url_for('remove_permission') }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="username" value="{{ current_user }}">
+                        <input type="hidden" name="bucket_name" value="{{ permission }}">
+                        <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+            <form method="POST" action="{{ url_for('remove_all_permissions') }}" class="mt-3">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="username" value="{{ current_user }}">
-                <input type="hidden" name="bucket_name" value="{{ permission }}">
-                <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                <button type="submit" class="btn btn-danger">Remove All Permissions</button>
             </form>
-        </li>
-        {% endfor %}
-    </ul>
-    <form method="POST" action="{{ url_for('remove_all_permissions') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="username" value="{{ current_user }}">
-        <button type="submit" class="btn btn-danger">Remove All Permissions</button>
-    </form>
+        </div>
+
+        <!-- Add New Permission Column -->
+        <div class="col-md-6">
+            <h4>Add New Permission</h4>
+            <form method="POST" action="{{ url_for('add_permission') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="username" value="{{ current_user }}">
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="new_bucket_name" name="new_bucket_name" placeholder="Enter bucket name to add" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Permission</button>
+            </form>
+        </div>
+    </div>
     {% endif %}
 </div>
 {% endblock %}

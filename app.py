@@ -1,4 +1,6 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, session
+import csv
+from io import BytesIO
+from flask import Flask, request, render_template, redirect, url_for, flash, session, send_file
 from flask_cors import CORS
 from flask_session import Session
 from flask_wtf import CSRFProtect
@@ -12,6 +14,8 @@ import json
 from functools import wraps
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+import pandas as pd
 
 load_dotenv()
 
@@ -41,10 +45,23 @@ def init_db():
                 username TEXT NOT NULL UNIQUE,
                 password TEXT NOT NULL,
                 role TEXT NOT NULL,
-                permissions TEXT
+                permissions TEXT,
+                permission_expiry DATE,  -- Date format: YYYY-MM-DD
+                last_login TIMESTAMP,
+                last_logout TIMESTAMP
             );
         """)
         conn.commit()
+
+def check_permission_expiry(username):
+    with sqlite3.connect("s3_browser.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT permission_expiry FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+        if result and result[0]:  # result[0] is the permission_expiry date string
+            permission_expiry_date = datetime.strptime(result[0], '%Y-%m-%d').date()
+            return datetime.now().date() <= permission_expiry_date  # Returns True if not expired
+        return False
 
 def login_required(f):
     @wraps(f)
@@ -95,6 +112,41 @@ def assume_role(role_arn):
 def index():
     return redirect(url_for('login'))
 
+
+@app.route('/download_audit', methods=['GET'])
+@login_required
+@admin_required
+def download_audit():
+    with sqlite3.connect("s3_browser.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT username, permissions, permission_expiry, last_login, last_logout FROM users
+        """)
+        users = cursor.fetchall()
+
+    # Convert data to a DataFrame
+    df = pd.DataFrame(users, columns=['Username', 'Permissions', 'Permission Expiry', 'Last Login', 'Last Logout'])
+
+    # Convert 'Last Login' and 'Last Logout' to readable format
+    df['Last Login'] = pd.to_datetime(df['Last Login'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
+    df['Last Logout'] = pd.to_datetime(df['Last Logout'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Write the DataFrame to a BytesIO object (in-memory CSV)
+    output = BytesIO()
+    df.to_csv(output, index=False)
+
+    # Seek to the beginning of the file-like object before sending
+    output.seek(0)
+
+    # Return the CSV file as an attachment
+    return send_file(
+        output,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name="user_audit.csv"
+    )
+
+
 def add_admin_user():
     with sqlite3.connect("s3_browser.db") as conn:
         cursor = conn.cursor()
@@ -119,6 +171,11 @@ def login():
             result = cursor.fetchone()
 
             if result and check_password_hash(result[0], password):
+                # Update last_login timestamp
+                cursor.execute("UPDATE users SET last_login = ? WHERE username = ?", 
+                               (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), username))
+                conn.commit()
+
                 session['username'] = username
                 session['role'] = result[1]
                 session['permissions'] = result[2].split(',')
@@ -130,9 +187,16 @@ def login():
 
 @app.route('/logout')
 def logout():
+    with sqlite3.connect("s3_browser.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET last_logout = ? WHERE username = ?", 
+                       (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), session['username']))
+        conn.commit()
+
     session.clear()
-    flash('You have been logged out.', 'info')
+    flash('You have been logged out.', 'success')
     return redirect(url_for('login'))
+
     
 @app.route('/admin', methods=['GET', 'POST'])
 @login_required
@@ -142,9 +206,10 @@ def admin():
         # Handle user creation and permissions assignment
         username = request.form.get('username')
         password = request.form.get('password')
-        bucket_names = request.form.get('bucket_names').split(',')  # Correct field name
+        bucket_names = request.form.get('bucket_names').split(',')
+        permission_expiry = request.form.get('permission_expiry')  # Get expiration date
 
-        hashed_password = generate_password_hash(password)  # Hash the password
+        hashed_password = generate_password_hash(password)
 
         with sqlite3.connect("s3_browser.db") as conn:
             cursor = conn.cursor()
@@ -156,8 +221,8 @@ def admin():
             else:
                 # Join the list of bucket names into a comma-separated string
                 permissions = ",".join(bucket.strip() for bucket in bucket_names)
-                cursor.execute("INSERT INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)",
-                               (username, hashed_password, 'user', permissions))
+                cursor.execute("INSERT INTO users (username, password, role, permissions, permission_expiry) VALUES (?, ?, ?, ?, ?)",
+                               (username, hashed_password, 'user', permissions, permission_expiry))
                 conn.commit()
                 flash('User created successfully.', 'success')
     
@@ -166,16 +231,19 @@ def admin():
         username = request.args.get('username_view')
         with sqlite3.connect("s3_browser.db") as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT permissions FROM users WHERE username = ?", (username,))
+            cursor.execute("SELECT permissions, permission_expiry FROM users WHERE username = ?", (username,))
             result = cursor.fetchone()
 
             if result:
-                user_permissions = result[0].split(',') if result[0] else []
+                permissions = result[0].split(',') if result[0] else []
+                permission_expiry = result[1]  # Get expiration date
+                user_permissions = {perm: permission_expiry for perm in permissions}
                 return render_template('admin.html', user_permissions=user_permissions, current_user=username)
             else:
                 flash('User not found.', 'danger')
 
     return render_template('admin.html')
+
 
 # Remove a specific bucket permission
 @app.route('/remove_permission', methods=['POST'])
@@ -209,6 +277,29 @@ def remove_all_permissions():
         cursor.execute("UPDATE users SET permissions = ? WHERE username = ?", ("", username))
         conn.commit()
         flash('All permissions removed successfully!', 'success')
+
+    return redirect(url_for('admin', username_view=username))
+
+@app.route('/add_permission', methods=['POST'])
+@admin_required
+def add_permission():
+    username = request.form['username']
+    new_bucket_name = request.form['new_bucket_name']
+
+    with sqlite3.connect("s3_browser.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT permissions FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+
+        if result:
+            permissions = result[0].split(',') if result[0] else []
+            if new_bucket_name not in permissions:
+                permissions.append(new_bucket_name)
+                cursor.execute("UPDATE users SET permissions = ? WHERE username = ?", (','.join(permissions), username))
+                conn.commit()
+                flash('Permission added successfully!', 'success')
+            else:
+                flash('User already has permission for this bucket.', 'warning')
 
     return redirect(url_for('admin', username_view=username))
 
@@ -260,6 +351,11 @@ def clear_credentials():
 @app.route('/buckets')
 @login_required
 def buckets():
+
+    if not check_permission_expiry(session.get('username')):
+        flash('Your permissions have expired. Please contact admin.', 'danger')
+        return redirect(url_for('login'))
+    
     client = get_s3_client()
     # if not client:
     #     flash('Please set your AWS credentials first.', 'warning')
