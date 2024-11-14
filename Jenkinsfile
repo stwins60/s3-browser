@@ -37,8 +37,17 @@ pipeline {
                 script {
                     sh "trivy image --severity CRITICAL,HIGH --ignore-unfixed --format json -o trivy_report.json $IMAGE_NAME"
                     def scanResults = readJSON file: 'trivy_report.json'
-                    def highVulns = scanResults.Results.collectMany { it.Vulnerabilities }.count { it.Severity == "HIGH" }
-                    def criticalVulns = scanResults.Results.collectMany { it.Vulnerabilities }.count { it.Severity == "CRITICAL" }
+                    int highVulns = 0
+                    int criticalVulns = 0
+
+                    scanResults.forEach { result ->
+                        if (result.Severity == "HIGH") {
+                            highVulns++
+                        }
+                        if (result.Severity == "CRITICAL") {
+                            criticalVulns++
+                        }
+                    }
 
                     if (highVulns > 0 || criticalVulns > 0) {
                         error("Pipeline failed due to high or critical vulnerabilities")
