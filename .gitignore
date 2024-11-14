@@ -2,3 +2,4 @@
 **/venv
 s3_browser.db
 .env
+docker-compose.yml
