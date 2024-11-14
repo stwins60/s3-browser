@@ -15,7 +15,7 @@ pipeline {
         stage("Trivy File Scan") {
             steps {
                 script {
-                    def trivyScan = sh(script: "trivy --exit-code 0 --severity HIGH --no-progress ${IMAGE_NAME}", returnStatus: true)
+                    def trivyScan = sh(script: "trivy fs . --exit-code 0 --severity HIGH --no-progress", returnStatus: true)
                     if (trivyScan != 0) {
                         error("Trivy scan failed")
                     }
