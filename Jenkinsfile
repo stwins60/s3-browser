@@ -12,10 +12,40 @@ pipeline {
         //         checkout([$class: 'GitSCM', branches: [[name: '*/master']], userRemoteConfigs: [[url: 'https://github.com/stwins60/s3-browser.git']]])
         //     }
         // }
+        stage("Trivy File Scan") {
+            steps {
+                script {
+                    def trivyScan = sh(script: "trivy --exit-code 0 --severity HIGH --no-progress ${IMAGE_NAME}", returnStatus: true)
+                    if (trivyScan != 0) {
+                        error("Trivy scan failed")
+                    }
+                    else {
+                        echo "Trivy scan passed"
+                    }
+                }
+            }
+        }
         stage('Docker Build') {
             steps {
                 script {
                     sh "docker build -t $IMAGE_NAME ."
+                }
+            }
+        }
+        stage("Trivy Image Scan") {
+            steps {
+                script {
+                    sh "trivy image --severity CRITICAL,HIGH --ignore-unfixed --format json -o trivy_report.json $IMAGE_NAME"
+                    def scanResults = readJSON file: 'trivy_report.json'
+                    def highVulns = scanResults.Results.collectMany { it.Vulnerabilities }.count { it.Severity == "HIGH" }
+                    def criticalVulns = scanResults.Results.collectMany { it.Vulnerabilities }.count { it.Severity == "CRITICAL" }
+
+                    if (highVulns > 0 || criticalVulns > 0) {
+                        error("Pipeline failed due to high or critical vulnerabilities")
+                    }
+                    else {
+                        echo "No high or critical vulnerabilities found"
+                    }
                 }
             }
         }
