@@ -68,5 +68,14 @@ pipeline {
                 }
             }
         }
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    dir("./k8s") {
+                        sh "sed -i 's|IMAGE_NAME|${IMAGE_NAME}|g' deployment.yaml"
+                        sh "kubectl apply -f ."
+                }
+            }
+        }
     }
 }
